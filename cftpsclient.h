@@ -2,7 +2,11 @@
 #define CFTPSCLIENT_H
 
 /*
- *created by zhangys on 2024-11-25
+ * CFTPSClient is NOT a thread-safe class, when a single object being used in various thread, it is
+ * essential to avoide the occurance of the race condition.
+ *
+ *
+ * Created by zhangys on 2024-11-25
  */
 
 #include <optional>
@@ -33,12 +37,18 @@ enum FTPSCode
     EN_FTPS_LAST,   //not using
 };
 
+//async file transfermation
+
 class CFTPSClient
 {
 public:
     CFTPSClient(const StHostInfo & stInfo);
-    CFTPSClient(const std::string & strUserName, const std::string & strPassword, const std::string & strIP, const std::uint16_t nPort);
+    CFTPSClient(const std::string & strUserName,
+                const std::string & strPassword,
+                const std::string & strIP,
+                const std::uint16_t nPort);
     ~CFTPSClient();
+
 
     /*************************************************************************
      *  setting the remote service parameters and user logging parameters    *
@@ -49,8 +59,10 @@ public:
     CFTPSClient & setIP(const std::string & strIP);
     const StHostInfo & getParams() const;
 
+
     //to verify the parameters valid or not, return true when parameters valid,otherwise return false
     FTPSCode isParamsValid();
+
 
     //disconnect the connection between the remote and the local, return true on success, otherwise return false
     bool disconnectFromRemote() const;
@@ -66,10 +78,13 @@ public:
     std::optional<bool> rmDir(const std::string & strRemoteDir);
 
     //list the filename on given directory, the filename would be put into the returned vector
-    std::optional<std::vector<std::string>> lstDir(const std::string & strDirectory);
+    std::optional<std::vector<std::string>> lstDir(const std::string & strRemoteDir);
 
     //change the working directory, return true on success, otherwise return false
     std::optional<bool> cd(const std::string & strRemoteDir);
+
+    //get the current working directory, return as a string
+    std::optional<std::string> pwd();
 
 
     /**************************************
@@ -97,6 +112,10 @@ public:
     //get the file size of the given remote file
     std::optional<std::int64_t> getFileSize(const std::string & strFileName);
 
+
+    /**************************************
+     * general functionalities            *
+    **************************************/
     //get the progress of file upload or download as a percentage value
     std::optional<double> getProcess() const;
 
@@ -119,6 +138,8 @@ private:
 private:
     static size_t upReadCallback(void * ptr, size_t size, size_t nmemb, void * stream);
     static size_t downWriteCallback(void * ptr, size_t size, size_t nmemb, void * stream);
+
+    //callback functionality used to receive the returned info from the remote
     static size_t readResponseDataCallback(void * ptr, size_t size, size_t nmemb, void * stream);
 };
 
