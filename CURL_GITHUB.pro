@@ -19,7 +19,7 @@ else: unix:!android: target.path = /opt/$${TARGET}/bin
 
 
 INCLUDEPATH += ../../zd_code/curl/
-LIBS += -lcurl
+LIBS += -lcurl # -lstdc++fs
 
 HEADERS += \
           cftpsclient.h \
