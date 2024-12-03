@@ -24,8 +24,6 @@ enum FTPSCode
 
     EN_FTPS_FAILED_TO_CREATE_LOCAL_DIR,
 
-    EN_FTPS_UNKNOWN_ERROR,
-
     EN_FTPS_LAST,   //not using
 };
 
@@ -39,7 +37,6 @@ static std::unordered_map<FTPSCode, std::string> g_mpFtpsErrMsg = {
     std::pair<FTPSCode, std::string>{EN_FTPS_RESOURCE_INIT_ERROR, std::string("Failed to initialized curl")},
     std::pair<FTPSCode, std::string>{EN_FTPS_INVALID_INPUT_ARGS, std::string("Invalid parameters input")},
     std::pair<FTPSCode, std::string>{EN_FTPS_FAILED_TO_OPEN_LOCAL_FILE, std::string("Failed to open the given local file")},
-    std::pair<FTPSCode, std::string>{EN_FTPS_UNKNOWN_ERROR, std::string("")},
     std::pair<FTPSCode, std::string>{EN_FTPS_LAST, std::string("Such the enum is meaningless")},
     std::pair<FTPSCode, std::string>{EN_FTPS_FAILED_TO_CREATE_TMP_FILE, std::string("Failed to create a temperoary file by calling tmpfile")},
     };
@@ -140,16 +137,6 @@ std::optional<bool> CFTPSClient::isParamsValid()
     }
 }
 
-
-bool CFTPSClient::newSession()
-{
-    if(m_pCurl){
-        curl_easy_cleanup(m_pCurl);
-    }
-
-    m_pCurl = curl_easy_init();
-}
-
 //get the error message according to the error code
 const std::string & CFTPSClient::getErrMsg() const
 {
@@ -208,14 +195,14 @@ std::optional<bool> CFTPSClient::removeDir(const std::string & strRemoteDir)
     curl_easy_setopt(m_pCurl, CURLOPT_USERPWD, strUserPwd.c_str());
 
     struct curl_slist * pCommands = nullptr;
-    const std::string && rmdCommand = std::string("RMD ") + strRemoteDir;
-    pCommands = curl_slist_append(pCommands, rmdCommand.c_str());
+    const std::string && strCmd = std::string("RMD ") + strRemoteDir;
+    pCommands = curl_slist_append(pCommands, strCmd.c_str());
     curl_easy_setopt(m_pCurl, CURLOPT_QUOTE, pCommands);
 
     enRet = curl_easy_perform(m_pCurl);
     curl_slist_free_all(pCommands);
 
-    if(CURLE_OK == enRet){
+    if(CURLE_OK == enRet || CURLE_REMOTE_ACCESS_DENIED == enRet){
         return true;
     }else{
         m_strErrMsg = std::string(curl_easy_strerror(enRet));
@@ -268,6 +255,70 @@ std::optional<std::vector<std::string>> CFTPSClient::listDir(const std::string &
     }
 }
 
+//list the filename in detail on given directory, the filename would be put into the returned vector
+std::optional<std::vector<StFile>> CFTPSClient::listDir_detailed(const std::string & strRemoteDir)
+{
+    if(!m_pCurl){
+        this->m_strErrMsg = g_mpFtpsErrMsg[EN_FTPS_RESOURCE_INIT_ERROR];
+        return std::nullopt;
+    }
+
+    CURLcode enRet = CURL_LAST;
+    std::string && strURL = this->getIp_Port() + strRemoteDir + std::string("/");
+    std::string && strUserPwd = this->getUser_Pwd();
+    std::string strRemoteDirInfo;
+
+    curl_easy_setopt(m_pCurl, CURLOPT_URL, strURL.c_str());
+    curl_easy_setopt(m_pCurl, CURLOPT_USERPWD, strUserPwd.c_str());
+
+    //setting the write callback function
+    curl_easy_setopt(m_pCurl, CURLOPT_WRITEFUNCTION, readResponseDataCallback);
+    curl_easy_setopt(m_pCurl, CURLOPT_WRITEDATA, &strRemoteDirInfo);
+
+    struct curl_slist* pHeaderList = nullptr;
+    pHeaderList = curl_slist_append(pHeaderList, "PWD");
+    curl_easy_setopt(m_pCurl, CURLOPT_QUOTE, pHeaderList);
+
+    enRet = curl_easy_perform(m_pCurl);
+    curl_slist_free_all(pHeaderList);
+
+    if(CURLE_OK == enRet){
+        std::vector<StFile> vecFileInfo;
+        std::istringstream stream(strRemoteDirInfo);
+        std::string line;
+
+        while (std::getline(stream, line)) {
+            std::istringstream lineStream(line);
+            StFile stInfo;
+
+            //parsing a returned line
+            lineStream >> stInfo.strPermission
+                >> stInfo.nLinkCount
+                >> stInfo.strOwner
+                >> stInfo.strGroup
+                >> stInfo.nSize
+                >> stInfo.strMonth
+                >> stInfo.nDay
+                >> stInfo.strTime;
+
+            //parsing the file name
+            std::getline(lineStream, stInfo.strFileName);
+            if (!stInfo.strFileName.empty() && stInfo.strFileName[0] == ' ')
+                stInfo.strFileName = stInfo.strFileName.substr(1); //trimming off the space
+
+            vecFileInfo.push_back(stInfo);
+        }
+
+        return vecFileInfo;
+    }else{
+        m_strErrMsg = std::string(curl_easy_strerror(enRet));
+        return std::nullopt;
+    }
+
+    return std::nullopt;
+}
+
+
 //change the working directory, return true on success, otherwise return false
 std::optional<bool> CFTPSClient::cd(const std::string & strRemoteDir)
 {
@@ -313,7 +364,7 @@ std::optional<std::string> CFTPSClient::pwd()
     }
 
     CURLcode enRet = CURL_LAST;
-    std::string && strURL = this->getIp_Port();
+    std::string && strURL = this->getIp_Port();//+ std::string("/wqiin/");
     std::string && strUserPwd = this->getUser_Pwd();
     std::string strRemoteDir;
 

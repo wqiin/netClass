@@ -16,6 +16,19 @@
 #include <string>
 #include <cstdint>
 
+//file detailed infomation struct
+typedef struct STFileInfo{
+    std::string strPermission;  //file read write permission
+    std::uint32_t nLinkCount = 0;//file hard link count
+    std::string strOwner;//file owner
+    std::string strGroup;//file group
+    std::uint64_t nSize = 0;//file size, unit:byte
+    std::string strMonth;//file last modification month
+    std::int32_t nDay;//file last modification day in a month
+    std::string strTime;//file last modification time
+    std::string strFileName;//file fullname
+}StFile;
+
 
 //remote host service and user information
 typedef struct STHostInfo
@@ -65,8 +78,6 @@ public:
     //to verify the parameters valid or not, return true when parameters valid,otherwise return false
     std::optional<bool> isParamsValid();
 
-    bool newSession();
-
     /**************************************
      * directory operation functionalities*
     **************************************/
@@ -78,6 +89,9 @@ public:
 
     //list the filename on given directory, the filename would be put into the returned vector
     std::optional<std::vector<std::string>> listDir(const std::string & strRemoteDir);
+
+    //list the filename in detail on given directory, the filename would be put into the returned vector
+    std::optional<std::vector<StFile>> listDir_detailed(const std::string & strRemoteDir);
 
     //change the working directory, return true on success, otherwise return false
     std::optional<bool> cd(const std::string & strRemoteDir);
