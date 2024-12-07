@@ -49,13 +49,10 @@ private:
     std::int64_t m_nTimeCost = 0;
     std::string m_strErrMsg = "";//error message of the last operation
     CURL * m_pCurl = nullptr;//curl session handle
+    float m_fProgress = 0.0f;//progress of file transportation
 
 public:
     CFTPSClient(const StHostInfo & stInfo);
-    CFTPSClient(const std::string & strUserName,
-                const std::string & strPassword,
-                const std::string & strIP,
-                const std::uint16_t nPort);
     ~CFTPSClient();
 
     //copy constructor and assignment operator prohibited
@@ -117,13 +114,13 @@ public:
     std::optional<bool> upFile(const std::string & strLocalFile, const std::string & strRemotePath);
 
     //download the given remote file to the local path, return true on success, otherwise return false
-    std::optional<bool> downFile(const std::string & strRemoteFile, const std::string & strLocalPath);
+    std::optional<bool> downFile(const std::string & strRemoteFile, const std::string & strLocalFile);
 
     //copy the given remote file into the given remote directory
     std::optional<bool> copyFile(const std::string & strRemoteFile, const std::string & strRemotePath);
 
-    //get modification time of the given remote file, return true on success, otherwise return false
-    std::optional<bool> geFiletModifiedTime(const std::string & strRemoteFile);
+    //get the given remote file content, return as a std::string
+    std::optional<std::string> catFile(const std::string & strRemoteFile);
 
     //get the file size of the given remote file
     std::optional<std::int64_t> getFileSize(const std::string & strRemoteFileName);

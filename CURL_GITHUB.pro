@@ -6,11 +6,6 @@ CONFIG += c++17 cmdline
 # In order to do so, uncomment the following line.
 #DEFINES += QT_DISABLE_DEPRECATED_BEFORE=0x060000    # disables all the APIs deprecated before Qt 6.0.0
 
-SOURCES += \
-        cftpsclient.cpp \
-        chttpclient.cpp \
-        chttpserver.cpp \
-        main.cpp
 
 # Default rules for deployment.
 qnx: target.path = /tmp/$${TARGET}/bin
@@ -19,9 +14,15 @@ else: unix:!android: target.path = /opt/$${TARGET}/bin
 
 
 INCLUDEPATH += ../../zd_code/curl/
-LIBS += -lcurl # -lstdc++fs
+LIBS += -lcurl
 
 HEADERS += \
           cftpsclient.h \
           chttpclient.h \
           chttpserver.h
+
+SOURCES += \
+        cftpsclient.cpp \
+        chttpclient.cpp \
+        chttpserver.cpp \
+        main.cpp

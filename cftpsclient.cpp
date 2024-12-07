@@ -7,6 +7,8 @@
 #include <filesystem>
 #include <unordered_map>
 
+#include <iostream>
+
 enum FTPSCode
 {
     EN_FTPS_OK = 0,
@@ -47,18 +49,6 @@ CFTPSClient::CFTPSClient(const StHostInfo & stInfo)
 {
     m_nTimeCost = 0;
     m_stParams = stInfo;
-
-    curl_global_init(CURL_GLOBAL_DEFAULT);//curl global initialization
-    m_pCurl = curl_easy_init();
-}
-
-CFTPSClient::CFTPSClient(const std::string & strUserName, const std::string & strPassword, const std::string & strIP, const std::uint16_t nPort)
-{
-    m_nTimeCost = 0;
-    m_stParams.m_strUserName = strUserName;
-    m_stParams.m_nPort = nPort;
-    m_stParams.m_strIp = strIP;
-    m_stParams.m_strPassword = strPassword;
 
     curl_global_init(CURL_GLOBAL_DEFAULT);//curl global initialization
     m_pCurl = curl_easy_init();
@@ -364,13 +354,30 @@ std::optional<std::string> CFTPSClient::pwd()
     }
 
     CURLcode enRet = CURL_LAST;
-    std::string && strURL = this->getIp_Port();//+ std::string("/wqiin/");
+    std::string && strURL = this->getIp_Port();;
     std::string && strUserPwd = this->getUser_Pwd();
     std::string strRemoteDir;
 
     curl_easy_setopt(m_pCurl, CURLOPT_URL, strURL.c_str());
     curl_easy_setopt(m_pCurl, CURLOPT_USERPWD, strUserPwd.c_str());
 
+    enRet = curl_easy_perform(m_pCurl);
+    if(CURLE_OK != enRet){
+        m_strErrMsg = std::string(curl_easy_strerror(enRet));
+        return std::nullopt;
+    }
+
+    char* effectiveUrl = nullptr;
+    enRet = curl_easy_getinfo(m_pCurl, CURLINFO_EFFECTIVE_URL, &effectiveUrl);
+    if (enRet == CURLE_OK && effectiveUrl) {
+        std::string strRetDir = effectiveUrl;
+        return strRetDir;
+    }else{
+        m_strErrMsg = std::string(curl_easy_strerror(enRet));
+        return std::nullopt;
+    }
+
+    /*
     //setting the write callback function
     curl_easy_setopt(m_pCurl, CURLOPT_WRITEFUNCTION, readResponseDataCallback);
     curl_easy_setopt(m_pCurl, CURLOPT_WRITEDATA, &strRemoteDir);
@@ -381,7 +388,7 @@ std::optional<std::string> CFTPSClient::pwd()
 
     enRet = curl_easy_perform(m_pCurl);
     curl_slist_free_all(pHeaderList);
-
+    */
     if(CURLE_OK == enRet){
         return strRemoteDir;
     }else{
@@ -525,6 +532,7 @@ std::optional<bool> CFTPSClient::upFile(const std::string & strLocalFile, const 
     size_t nFileSize = ftell(fp);//get the size of the file to upload
     fseek(fp, 0L, SEEK_SET);
 
+    m_fProgress = 0.0f;
     const std::string && strURL = this->getIp_Port() + strRemotePath;
     const std::string && strUserPwd = this->getUser_Pwd();
     CURLcode enRet = CURL_LAST;
@@ -536,6 +544,9 @@ std::optional<bool> CFTPSClient::upFile(const std::string & strLocalFile, const 
     curl_easy_setopt(m_pCurl, CURLOPT_FTP_CREATE_MISSING_DIRS, 1);
     curl_easy_setopt(m_pCurl, CURLOPT_UPLOAD, 1);
     curl_easy_setopt(m_pCurl, CURLOPT_INFILESIZE, nFileSize);
+    curl_easy_setopt(m_pCurl, CURLOPT_PROGRESSFUNCTION, progressCallback);
+    curl_easy_setopt(m_pCurl, CURLOPT_PROGRESSDATA, &m_fProgress);  // passing user data into the callback function
+    curl_easy_setopt(m_pCurl, CURLOPT_NOPROGRESS, 0L); // enable progress callback
 
     enRet = curl_easy_perform(m_pCurl);
     fclose(fp);
@@ -573,6 +584,7 @@ std::optional<bool> CFTPSClient::downFile(const std::string & strRemoteFile, con
         return std::nullopt;
     }
 
+    m_fProgress = 0.0f;
     const std::string && strURL = this->getIp_Port() + strRemoteFile;
     const std::string && strUserPwd = this->getUser_Pwd();
     CURLcode enRet = CURL_LAST;
@@ -580,6 +592,9 @@ std::optional<bool> CFTPSClient::downFile(const std::string & strRemoteFile, con
     curl_easy_setopt(m_pCurl, CURLOPT_URL, strURL.c_str());
     curl_easy_setopt(m_pCurl, CURLOPT_USERPWD, strUserPwd.c_str());
     curl_easy_setopt(m_pCurl, CURLOPT_WRITEFUNCTION, CFTPSClient::downWriteCallback);
+    curl_easy_setopt(m_pCurl, CURLOPT_PROGRESSFUNCTION, progressCallback);
+    curl_easy_setopt(m_pCurl, CURLOPT_PROGRESSDATA, &m_fProgress);  // passing user data into the callback function
+    curl_easy_setopt(m_pCurl, CURLOPT_NOPROGRESS, 0L); // enable progress callback
     curl_easy_setopt(m_pCurl, CURLOPT_WRITEDATA, fp);
 
     enRet = curl_easy_perform(m_pCurl);
@@ -593,16 +608,10 @@ std::optional<bool> CFTPSClient::downFile(const std::string & strRemoteFile, con
     }
 }
 
-//copy the given remote file into the given remote directory
-std::optional<bool> CFTPSClient::copyFile(const std::string & strRemoteSourceFile, const std::string & strRemoteDestFile)
+//get the given remote file content, return as a std::string
+std::optional<std::string> CFTPSClient::catFile(const std::string & strRemoteFile)
 {
-    //usually way to do:
-    //first, download the given remote file
-    //second, uplaod the file download to the given remote path
-    //third, delete the local temp file
-
-    //some ftp sever support SITE COPY command which allows copy the source to the destination in the remote
-    if(strRemoteSourceFile.empty() || strRemoteDestFile.empty()){
+    if(strRemoteFile.empty()){
         this->m_strErrMsg = g_mpFtpsErrMsg[EN_FTPS_INVALID_INPUT_ARGS];
         return std::nullopt;
     }
@@ -612,33 +621,31 @@ std::optional<bool> CFTPSClient::copyFile(const std::string & strRemoteSourceFil
         return std::nullopt;
     }
 
-    CURLcode enRet = CURL_LAST;
-    const std::string && strURL = this->getIp_Port() + strRemoteSourceFile;
+    const std::string && strURL = this->getIp_Port() + "/wqiin/install.sh";// + strRemoteFile;
     const std::string && strUserPwd = this->getUser_Pwd();
-    const std::string strCmd = std::string("SITE COPY ") + strRemoteSourceFile + std::string(" ") + strRemoteDestFile;
+    CURLcode enRet = CURL_LAST;
+    std::string strRetFileInfo;
+
+    std::string strCmd = "MDTM " + strRemoteFile;
 
     curl_easy_setopt(m_pCurl, CURLOPT_URL, strURL.c_str());
     curl_easy_setopt(m_pCurl, CURLOPT_USERPWD, strUserPwd.c_str());
+    //curl_easy_setopt(m_pCurl, CURLOPT_CUSTOMREQUEST, strCmd.c_str()/*"MDTM""LIST"*/);
+    curl_easy_setopt(m_pCurl, CURLOPT_WRITEFUNCTION, readResponseDataCallback);
+    curl_easy_setopt(m_pCurl, CURLOPT_WRITEDATA, &strRetFileInfo);
 
-    struct curl_slist * pHeaderList = nullptr;
-    pHeaderList = curl_slist_append(pHeaderList, strCmd.c_str());
-    curl_easy_setopt(m_pCurl, CURLOPT_QUOTE, pHeaderList);
+    struct curl_slist* headerList = nullptr;
+    headerList = curl_slist_append(headerList, strCmd.c_str());
+    curl_easy_setopt(m_pCurl, CURLOPT_QUOTE, headerList);
 
     enRet = curl_easy_perform(m_pCurl);
-    curl_slist_free_all(pHeaderList);
-
-    if (CURLE_OK == enRet){
-        return true;
+    if(CURLE_OK == enRet){
+        std::cout << strRetFileInfo;
+        return strRetFileInfo;
     }else{
         m_strErrMsg = std::string(curl_easy_strerror(enRet));
-        return false;
+        return std::nullopt;
     }
-}
-
-//get modification time of the given remote file, return true on success, otherwise return false
-std::optional<bool> CFTPSClient::geFiletModifiedTime(const std::string & strRemoteFile)
-{
-    return std::nullopt;
 }
 
 //get the file size of the given remote file
@@ -688,20 +695,8 @@ std::optional<double> CFTPSClient::CFTPSClient::getProcess()
         return std::nullopt;
     }
 
-    double fProgressRet = 0.0;
-
-    // 设置进度回调函数
-    curl_easy_setopt(m_pCurl, CURLOPT_PROGRESSFUNCTION, progressCallback);
-    curl_easy_setopt(m_pCurl, CURLOPT_PROGRESSDATA, &fProgressRet);  // 这里可以传递上下文数据
-    return fProgressRet;
+    return m_fProgress;
 }
-
-//get time cost of the last functionality calling, return a positive valid value or a negative invalid value, (unit:ms)
-std::int64_t CFTPSClient::getTimeCost() const
-{
-    return -1;
-}
-
 
 std::string CFTPSClient::getIp_Port()
 {

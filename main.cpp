@@ -6,10 +6,16 @@
 
 int main(int argc, char *argv[])
 {
-    CFTPSClient ftp(std::string("hello"), std::string("515253"), std::string("127.0.0.1"), 21);
+    const StHostInfo stHost = {std::string("hello"), std::string("515253"), std::string("127.0.0.1"), 21};
+    CFTPSClient ftp(stHost);
 
-    auto && vecFiles = ftp.listDir_detailed("/wqiin");
+    //ftp.cd("/wqiin/wqiin");
+    //ftp.pwd();
 
+    ftp.catFile("/wqiin/install.sh");
+
+    /*
+    auto && vecFiles = ftp.listDir_detailed("/");
     if(vecFiles.has_value()){
         for(const auto & item : *vecFiles){
 
@@ -23,6 +29,7 @@ int main(int argc, char *argv[])
     }else{
         std::cout << "ErrMsg:" << ftp.getErrMsg() << std::endl;
     }
+    */
 
     /*
     auto && vecDir = ftp.listDir("/wqiin");
