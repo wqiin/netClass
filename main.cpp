@@ -9,10 +9,19 @@ int main(int argc, char *argv[])
     const StHostInfo stHost = {std::string("hello"), std::string("515253"), std::string("127.0.0.1"), 21};
     CFTPSClient ftp(stHost);
 
-    //ftp.cd("/wqiin/wqiin");
-    //ftp.pwd();
+    // auto ret = ftp.getFileModificationTime("/wqiin/install.sh");
 
-    ftp.catFile("/wqiin/install.sh");
+    // if(ret.has_value()){
+    //     std::cout << "timestamp:" << (*ret).first << "  string:" << (*ret).second << std::endl;
+    //}
+
+
+    ftp.cd("/wqiin/wqiin/");
+    ftp.pwd();
+
+    /*
+    //ftp.catFile("/wqiin/install.sh");
+    //ftp.listDir_detailed("/wqiin/");
 
     /*
     auto && vecFiles = ftp.listDir_detailed("/");
@@ -153,4 +162,5 @@ int main(int argc, char *argv[])
 
     //CFTPSClient::createDirectory("/Users/wqiin/Desktop/C++17_file_system_test/hello.exe");
     */
+
 }

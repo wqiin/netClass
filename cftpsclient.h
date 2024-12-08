@@ -125,6 +125,11 @@ public:
     //get the file size of the given remote file
     std::optional<std::int64_t> getFileSize(const std::string & strRemoteFileName);
 
+    //get the file size of the given remote file
+    std::optional<std::uint64_t> getSize(const std::string & strRemoteFileName);
+
+    //get the last file modification time, return the timestamp and time stirng with format 'yyyy-MM-dd hh:mm:ss' on sccuess
+    std::optional<std::pair<std::int64_t, std::string>> getFileModificationTime(const std::string & strTest);
 
     /**************************************
      * general functionalities            *
@@ -137,6 +142,8 @@ public:
 
     //get the error message according to the error code
     const std::string & getErrMsg() const;
+
+
 
     //mage file upload or download
     //async file transportation
