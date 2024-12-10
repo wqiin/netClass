@@ -1,6 +1,6 @@
 QT -= core
 
-CONFIG += c++17 cmdline
+CONFIG += c++20 cmdline
 
 # You can make your code fail to compile if it uses deprecated APIs.
 # In order to do so, uncomment the following line.
@@ -18,11 +18,9 @@ LIBS += -lcurl
 
 HEADERS += \
           cftpsclient.h \
-          chttpclient.h \
-          chttpserver.h
+          chttpclient.h
 
 SOURCES += \
         cftpsclient.cpp \
         chttpclient.cpp \
-        chttpserver.cpp \
         main.cpp

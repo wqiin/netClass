@@ -15,6 +15,7 @@
 #include <vector>
 #include <string>
 #include <cstdint>
+#include <future>
 
 //file detailed infomation struct
 typedef struct STFileInfo{
@@ -39,8 +40,14 @@ typedef struct STHostInfo
     std::uint16_t m_nPort = 0;
 }StHostInfo;
 
+//file transfer protocol
+enum FTPMode{
+    _EN_FTP_ = 0,   //
+    _EN_FTPS_,
 
-//async file transfermation
+    //DO NOT USE the below
+    _EN_INVALID_LAST_,
+};
 
 class CFTPSClient
 {
@@ -50,9 +57,10 @@ private:
     std::string m_strErrMsg = "";//error message of the last operation
     CURL * m_pCurl = nullptr;//curl session handle
     float m_fProgress = 0.0f;//progress of file transportation
+    FTPMode m_enMode = _EN_FTP_;
 
 public:
-    CFTPSClient(const StHostInfo & stInfo);
+    CFTPSClient(const StHostInfo & stInfo, FTPMode enMode = _EN_FTP_);
     ~CFTPSClient();
 
     //copy constructor and assignment operator prohibited
@@ -69,6 +77,7 @@ public:
     CFTPSClient & setPassword(const std::string & strPassword);
     CFTPSClient & setPort(const std::uint16_t nPort);
     CFTPSClient & setIP(const std::string & strIP);
+    CFTPSClient & setMode(const FTPMode enMode);
     const StHostInfo & getParams() const;
 
 
@@ -100,7 +109,6 @@ public:
     /**************************************
      * file operation functionalities     *
     **************************************/
-
     //make a given file in the remote,  return true on success, otherwise return false
     std::optional<bool> makeFile(const std::string & strRemoteFile);
 
@@ -113,8 +121,14 @@ public:
     //upload the given local file to the remote path, return true on success, otherwise return false
     std::optional<bool> upFile(const std::string & strLocalFile, const std::string & strRemotePath);
 
+    //async file upload, return true on success, otherwise return false
+    std::future<std::optional<bool>> upFile_async(const std::string & strLocalFile, const std::string & strRemotePath);
+
     //download the given remote file to the local path, return true on success, otherwise return false
     std::optional<bool> downFile(const std::string & strRemoteFile, const std::string & strLocalFile);
+
+    //async file download, return true on success, otherwise return false
+    std::future<std::optional<bool>> downFile_async(const std::string & strLocalFile, const std::string & strRemotePath);
 
     //copy the given remote file into the given remote directory
     std::optional<bool> copyFile(const std::string & strRemoteFile, const std::string & strRemotePath);
@@ -143,11 +157,7 @@ public:
     //get the error message according to the error code
     const std::string & getErrMsg() const;
 
-
-
     //mage file upload or download
-    //async file transportation
-
 private:
     //upload read callback, being used to read the local file to upload
     static size_t upReadCallback(void * ptr, size_t size, size_t nmemb, void * stream);
@@ -159,7 +169,7 @@ private:
     static size_t readResponseDataCallback(void * ptr, size_t size, size_t nmemb, void * stream);
 
     //ignore the data from the remote, do nothing
-    static size_t throw_away(void * ptr, size_t size, size_t nmemb, void * data);
+    static size_t throwAwayReturnData(void * ptr, size_t size, size_t nmemb, void * data);
 
     //the get the progress of the file transportation
     static int progressCallback(void* p, double dltotal, double dlnow, double uptotal, double upnow);
