@@ -1,7 +1,5 @@
 #include "cftpsclient.h"
 
-#include "curl/curl.h"
-
 #include <sstream>
 #include <cstdio>   //for tempfile()
 #include <filesystem>
@@ -208,7 +206,7 @@ std::optional<bool> CFTPSClient::removeDir(const std::string & strRemoteDir)
     if(CURLE_OK == enRet || CURLE_REMOTE_ACCESS_DENIED == enRet){
         return true;
     }else{
-        m_strErrMsg = std::string(curl_easy_strerror(enRet));
+        this->m_strErrMsg = std::string(curl_easy_strerror(enRet));
         return false;
     }
 }
