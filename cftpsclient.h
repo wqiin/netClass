@@ -79,6 +79,7 @@ public:
     CFTPSClient & setIP(const std::string & strIP);
     CFTPSClient & setMode(const FTPMode enMode);
     const StHostInfo & getParams() const;
+    CURL * getHandle();
 
 
     //to verify the parameters valid or not, return true when parameters valid,otherwise return false
@@ -121,14 +122,14 @@ public:
     //upload the given local file to the remote path, return true on success, otherwise return false
     std::optional<bool> upFile(const std::string & strLocalFile, const std::string & strRemotePath);
 
-    //async file upload, return true on success, otherwise return false
-    std::future<std::optional<bool>> upFile_async(const std::string & strLocalFile, const std::string & strRemotePath);
+    //async file upload, return true on success, otherwise return false and relative error message
+    std::future<std::optional<std::pair<bool, std::string>>> upFile_async(const std::string & strLocalFile, const std::string & strRemotePath);
 
     //download the given remote file to the local path, return true on success, otherwise return false
     std::optional<bool> downFile(const std::string & strRemoteFile, const std::string & strLocalFile);
 
-    //async file download, return true on success, otherwise return false
-    std::future<std::optional<bool>> downFile_async(const std::string & strLocalFile, const std::string & strRemotePath);
+    //async file download, return true on success, otherwise return false and relative error message
+    std::future<std::optional<std::pair<bool, std::string>>> downFile_async(const std::string & strLocalFile, const std::string & strRemotePath);
 
     //copy the given remote file into the given remote directory
     std::optional<bool> copyFile(const std::string & strRemoteFile, const std::string & strRemotePath);

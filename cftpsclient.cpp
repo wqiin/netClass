@@ -10,6 +10,7 @@
 #include <iomanip> // for std::put_time
 #include <ctime>   // for std::tm
 #include <thread>
+#include <utility>
 
 namespace fs = std::filesystem;
 enum FTPSCode
@@ -34,17 +35,17 @@ enum FTPSCode
 
 //error code being mapped into the error message
 static std::unordered_map<FTPSCode, std::string> g_mpFtpsErrMsg = {
-    std::pair<FTPSCode, std::string>{EN_FTPS_OK, std::string("No Error, everything OK")},
-    std::pair<FTPSCode, std::string>{EN_FTPS_CONNECT_TIMEOUT, std::string("Timeout when connecting the Remote")},
-    std::pair<FTPSCode, std::string>{EN_FTPS_TRANSIT_TIMEOUT, std::string("timeout when file transfermation")},
-    std::pair<FTPSCode, std::string>{EN_FTPS_PERMISSION_DENIED, std::string("Permission deined")},
-    std::pair<FTPSCode, std::string>{EN_FTPS_INVALID_CONNECT_ARGS, std::string("Invalid remote connecting parameters")},
-    std::pair<FTPSCode, std::string>{EN_FTPS_RESOURCE_INIT_ERROR, std::string("Failed to initialized curl")},
-    std::pair<FTPSCode, std::string>{EN_FTPS_INVALID_INPUT_ARGS, std::string("Invalid parameters input")},
-    std::pair<FTPSCode, std::string>{EN_FTPS_FAILED_TO_OPEN_LOCAL_FILE, std::string("Failed to open the given local file")},
-    std::pair<FTPSCode, std::string>{EN_FTPS_LAST, std::string("Such the enum is meaningless")},
-    std::pair<FTPSCode, std::string>{EN_FTPS_FAILED_TO_CREATE_TMP_FILE, std::string("Failed to create a temperoary file by calling tmpfile")},
-    };
+    std::make_pair(EN_FTPS_OK, std::string("No Error, everything OK")),
+    std::make_pair(EN_FTPS_CONNECT_TIMEOUT, std::string("Timeout when connecting the Remote")),
+    std::make_pair(EN_FTPS_TRANSIT_TIMEOUT, std::string("timeout when file transfermation")),
+    std::make_pair(EN_FTPS_PERMISSION_DENIED, std::string("Permission deined")),
+    std::make_pair(EN_FTPS_INVALID_CONNECT_ARGS, std::string("Invalid remote connecting parameters")),
+    std::make_pair(EN_FTPS_RESOURCE_INIT_ERROR, std::string("Failed to initialized curl")),
+    std::make_pair(EN_FTPS_INVALID_INPUT_ARGS, std::string("Invalid parameters input")),
+    std::make_pair(EN_FTPS_FAILED_TO_OPEN_LOCAL_FILE, std::string("Failed to open the given local file")),
+    std::make_pair(EN_FTPS_LAST, std::string("Such the enum is meaningless")),
+    std::make_pair(EN_FTPS_FAILED_TO_CREATE_TMP_FILE, std::string("Failed to create a temperoary file by calling tmpfile")),
+};
 
 
 
@@ -101,6 +102,11 @@ CFTPSClient & CFTPSClient::setMode(const FTPMode enMode)
 const StHostInfo & CFTPSClient::getParams() const
 {
     return this->m_stParams;
+}
+
+CURL * CFTPSClient::getHandle()
+{
+    return this->m_pCurl;
 }
 
 //to verify the parameters valid or not, return true when parameters valid,otherwise return false
@@ -571,16 +577,74 @@ std::optional<bool> CFTPSClient::upFile(const std::string & strLocalFile, const 
     }
 }
 
-//async file upload, return true on success, otherwise return false
-std::future<std::optional<bool>> CFTPSClient::upFile_async(const std::string & strLocalFile, const std::string & strRemotePath)
+//async file upload, return true on success, otherwise return false and relative error message
+std::future<std::optional<std::pair<bool, std::string>>> CFTPSClient::upFile_async(const std::string & strLocalFile, const std::string & strRemotePath)
 {
-    std::promise<std::optional<bool>> promise;
-    std::future<std::optional<bool>> future = promise.get_future();
+    std::promise<std::optional<std::pair<bool, std::string>>> promise;
+    std::future<std::optional<std::pair<bool, std::string>>> future = promise.get_future();
 
     //async file upload, note strLocalFile and strRemotePath can NOT captured by reference
-    auto async_upFile = [this, strLocalFile, strRemotePath, promiseUpload = std::move(promise)]() mutable{
+    auto async_upFile = [this, strLocalFile, strRemotePath, promiseUpload = std::move(promise)]() mutable ->void{
         try{
-            auto bRet = this->upFile(strLocalFile, strRemotePath);
+            std::optional<std::pair<bool, std::string>> bRet;
+            if(strLocalFile.empty() || strRemotePath.empty()){
+                bRet = std::make_pair(false, g_mpFtpsErrMsg[EN_FTPS_INVALID_INPUT_ARGS]);
+                promiseUpload.set_value(bRet);
+                return ;
+            }
+
+            CURL * curl = curl_easy_init();
+            if(!curl){
+                bRet = std::make_pair(false, g_mpFtpsErrMsg[EN_FTPS_RESOURCE_INIT_ERROR]);
+                promiseUpload.set_value(bRet);
+                return ;
+            }
+
+            //open the local file to upload
+            FILE * fp = fopen(strLocalFile.c_str(), "rb");
+            if (!fp){
+                bRet = std::make_pair(false, g_mpFtpsErrMsg[EN_FTPS_FAILED_TO_OPEN_LOCAL_FILE]);
+                curl_easy_cleanup(curl);
+                promiseUpload.set_value(bRet);
+                return ;
+            }
+
+            //when the remote file passed as a directory, set the upload filename as the local filename
+            std::string strRemotePathTemp = strRemotePath;
+            if('/' == strRemotePathTemp.back()){
+                fs::path fpFileName = fs::path(strLocalFile);
+                strRemotePathTemp += fpFileName.filename().string();
+            }
+
+            //get the size of the file to upload
+            fseek(fp, 0L, SEEK_END);
+            size_t nFileSize = ftell(fp);
+            fseek(fp, 0L, SEEK_SET);
+
+            const std::string && strURL = this->getIp_Port() + strRemotePathTemp;
+            const std::string && strUserPwd = this->getUser_Pwd();
+
+            curl_easy_setopt(curl, CURLOPT_URL, strURL.c_str());
+            curl_easy_setopt(curl, CURLOPT_USERPWD, strUserPwd.c_str());
+            curl_easy_setopt(curl, CURLOPT_READFUNCTION, CFTPSClient::upReadCallback);
+            curl_easy_setopt(curl, CURLOPT_READDATA, fp);
+            curl_easy_setopt(curl, CURLOPT_FTP_CREATE_MISSING_DIRS, 1);
+            curl_easy_setopt(curl, CURLOPT_UPLOAD, 1);
+            curl_easy_setopt(curl, CURLOPT_INFILESIZE, nFileSize);
+            curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
+            curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
+
+            //perform the file upload request
+            CURLcode enRet = curl_easy_perform(curl);
+            curl_easy_cleanup(curl);
+            fclose(fp);
+
+            if (CURLE_OK == enRet){
+                bRet = std::make_pair(true, std::string());
+            }else{
+                bRet = std::make_pair(false, std::string(curl_easy_strerror(enRet)));
+            }
+
             promiseUpload.set_value(bRet);
         }catch(...){
             promiseUpload.set_exception(std::current_exception());
@@ -648,22 +712,77 @@ std::optional<bool> CFTPSClient::downFile(const std::string & strRemoteFile, con
 }
 
 //async file download, return true on success, otherwise return false
-std::future<std::optional<bool>> CFTPSClient::downFile_async(const std::string & strRemoteFile, const std::string & strLocalFile)
+std::future<std::optional<std::pair<bool, std::string>>> CFTPSClient::downFile_async(const std::string & strLocalFile, const std::string & strRemoteFile)
 {
-    std::promise<std::optional<bool>> promise;
-    std::future<std::optional<bool>> future = promise.get_future();
+    std::promise<std::optional<std::pair<bool, std::string>>> promise;
+    std::future<std::optional<std::pair<bool, std::string>>> future = promise.get_future();
 
-    //async file upload, note strLocalFile and strRemotePath can NOT captured by reference
-    auto async_upFile = [this, strRemoteFile, strLocalFile, promiseUpload = std::move(promise)]() mutable{
+    //async file download, NOTE: strLocalFile and strRemotePath can NOT captured by reference
+    auto async_downFile = [this, strRemoteFile, strLocalFile, promiseDownload = std::move(promise)]() mutable ->void{
         try{
-            auto bRet = this->upFile(strRemoteFile, strLocalFile);
-            promiseUpload.set_value(bRet);
+            std::optional<std::pair<bool, std::string>> bRet;
+            if(strRemoteFile.empty() || strLocalFile.empty()){
+                bRet = std::make_pair(false, g_mpFtpsErrMsg[EN_FTPS_INVALID_INPUT_ARGS]);
+                promiseDownload.set_value(bRet);
+                return ;
+            }
+
+            CURL * curl = curl_easy_init();
+            if(!curl){
+                bRet = std::make_pair(false, g_mpFtpsErrMsg[EN_FTPS_RESOURCE_INIT_ERROR]);
+                promiseDownload.set_value(bRet);
+                return ;
+            }
+
+            //create the local file path if not existing
+            if(!CFTPSClient::createDirectory(strLocalFile)){
+                bRet = std::make_pair(false, g_mpFtpsErrMsg[EN_FTPS_FAILED_TO_CREATE_LOCAL_DIR]);
+                promiseDownload.set_value(bRet);
+                return ;
+            }
+
+            //when the local file name passed as a directory, set the donw file name as the remote filename
+            std::string strLocalFileTemp = strLocalFile;
+            if('/' == strLocalFileTemp.back()){
+                fs::path fpFileName = fs::path(strRemoteFile);
+                strLocalFileTemp += fpFileName.filename().string();
+            }
+
+            FILE * fp = fopen(strLocalFileTemp.c_str(), "wb+");
+            if(!fp){
+                bRet = std::make_pair(false, g_mpFtpsErrMsg[EN_FTPS_FAILED_TO_OPEN_LOCAL_FILE]);
+                promiseDownload.set_value(bRet);
+                return ;
+            }
+
+            const std::string && strURL = this->getIp_Port() + strRemoteFile;
+            const std::string && strUserPwd = this->getUser_Pwd();
+
+            curl_easy_setopt(curl, CURLOPT_URL, strURL.c_str());
+            curl_easy_setopt(curl, CURLOPT_USERPWD, strUserPwd.c_str());
+            curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, CFTPSClient::downWriteCallback);
+            curl_easy_setopt(curl, CURLOPT_WRITEDATA, fp);
+            curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
+            curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
+
+            //perform the download request
+            CURLcode enRet = curl_easy_perform(curl);
+            fclose(fp);
+            curl_easy_cleanup(curl);
+
+            if (CURLE_OK == enRet){
+                bRet = std::make_pair(true, std::string());
+            }else{
+                bRet = std::make_pair(false, std::string(curl_easy_strerror(enRet)));
+            }
+
+            promiseDownload.set_value(bRet);
         }catch(...){
-            promiseUpload.set_exception(std::current_exception());
+            promiseDownload.set_exception(std::current_exception());
         }
     };
 
-    std::thread(std::move(async_upFile)).detach();
+    std::thread(std::move(async_downFile)).detach();
     return future;
 }
 
