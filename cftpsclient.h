@@ -16,6 +16,7 @@
 #include <string>
 #include <cstdint>
 #include <future>
+#include <memory>
 
 //file detailed infomation struct
 typedef struct STFileInfo{
@@ -55,7 +56,8 @@ private:
     StHostInfo m_stParams;//ftp connection parameters
     std::int64_t m_nTimeCost = 0;
     std::string m_strErrMsg = "";//error message of the last operation
-    CURL * m_pCurl = nullptr;//curl session handle
+    //CURL * m_pCurl = nullptr;//curl session handle
+    std::unique_ptr<CURL, decltype(&curl_easy_cleanup)> m_pCurl;//(nullptr, &curl_easy_cleanup);
     float m_fProgress = 0.0f;//progress of file transportation
     FTPMode m_enMode = _EN_FTP_;
 
@@ -68,6 +70,8 @@ public:
     CFTPSClient(const CFTPSClient && ) = delete;
     void operator=(const CFTPSClient &) = delete;
     void operator=(const CFTPSClient &&) = delete;
+    bool operator==(const CFTPSClient &) = delete;
+    bool operator==(const CFTPSClient &&) = delete;
 
 
     /*************************************************************************
@@ -79,8 +83,6 @@ public:
     CFTPSClient & setIP(const std::string & strIP);
     CFTPSClient & setMode(const FTPMode enMode);
     const StHostInfo & getParams() const;
-    CURL * getHandle();
-
 
     //to verify the parameters valid or not, return true when parameters valid,otherwise return false
     std::optional<bool> isParamsValid();
@@ -126,7 +128,7 @@ public:
     std::future<std::optional<std::pair<bool, std::string>>> upFile_async(const std::string & strLocalFile, const std::string & strRemotePath);
 
     //download the given remote file to the local path, return true on success, otherwise return false
-    std::optional<bool> downFile(const std::string & strRemoteFile, const std::string & strLocalFile);
+    std::optional<bool> downFile(const std::string & strLocalFile, const std::string & strRemoteFile);
 
     //async file download, return true on success, otherwise return false and relative error message
     std::future<std::optional<std::pair<bool, std::string>>> downFile_async(const std::string & strLocalFile, const std::string & strRemotePath);
@@ -152,9 +154,6 @@ public:
     //get the progress of file upload or download as a percentage value
     std::optional<double> getProcess();
 
-    //get time cost of the last functionality calling, return a positive valid value or a negative invalid value, (unit:ms)
-    std::int64_t getTimeCost() const;
-
     //get the error message according to the error code
     const std::string & getErrMsg() const;
 
@@ -170,7 +169,7 @@ private:
     static size_t readResponseDataCallback(void * ptr, size_t size, size_t nmemb, void * stream);
 
     //ignore the data from the remote, do nothing
-    static size_t throwAwayReturnData(void * ptr, size_t size, size_t nmemb, void * data);
+    static size_t dropAwayCallback(void * ptr, size_t size, size_t nmemb, void * data);
 
     //the get the progress of the file transportation
     static int progressCallback(void* p, double dltotal, double dlnow, double uptotal, double upnow);
