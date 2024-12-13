@@ -57,7 +57,7 @@ class CFTPSClient
 private:
     StHostInfo m_stParams;//ftp connection parameters
     std::string m_strErrMsg = "";//error message of the last operation
-    std::unique_ptr<CURL, decltype(&curl_easy_cleanup)> m_pCurl;//(nullptr, &curl_easy_cleanup);
+    std::unique_ptr<CURL, decltype(&curl_easy_cleanup)> m_pCurl;
 
 public:
     CFTPSClient(const StHostInfo & stInfo);
@@ -173,8 +173,8 @@ private:
     static int progressCallback(void* p, double dltotal, double dlnow, double uptotal, double upnow);
 
 public:
-    //craete the missing directory og the given file
-    static bool createDirectory(const std::string & strFile);
+    //craete the missing directory og the given file, return true on success, otherwise return flase and relative error message
+    static std::optional<std::pair<bool, std::string>> createDirectory(const std::string & strLocalFile);
 
 private:
     std::string getIp_Port();

@@ -18,9 +18,11 @@ LIBS += -lcurl
 
 HEADERS += \
           cftpsclient.h \
-          chttpclient.h
+          chttpclient.h \
+          cresourceinit.h
 
 SOURCES += \
         cftpsclient.cpp \
         chttpclient.cpp \
+        cresourceinit.cpp \
         main.cpp

@@ -1,5 +1,7 @@
 #include "chttpclient.h"
 
+#include "cresourceinit.h"
+
 #include <unordered_map>
 
 enum HTPPCode{
@@ -19,23 +21,19 @@ static std::unordered_map<HTPPCode, std::string> g_mpHttpsErrMsg = {
 };
 
 
-CHTTPClient::CHTTPClient(const std::string & strIp, const std::uint16_t nPort)
+CHTTPClient::CHTTPClient(const std::string & strIp, const std::uint16_t nPort) : m_pCurl(nullptr, &curl_easy_cleanup)
 {
+    if(!CResourceInit::init())
+        this->m_strErrMsg = CResourceInit::getErrMsg();
+    else
+        this->m_pCurl.reset(curl_easy_init());
+
     this->m_strIp = strIp;
     this->m_nPort = nPort;
-
-    curl_global_init(CURL_GLOBAL_DEFAULT);//curl global initialization
-    this->m_pCurl = curl_easy_init();
 }
 
 CHTTPClient::~CHTTPClient()
 {
-    if(this->m_pCurl){
-        curl_easy_cleanup(this->m_pCurl);
-        this->m_pCurl = nullptr;
-    }
-
-    curl_global_cleanup();//free curl global resource
 }
 
 
@@ -66,13 +64,13 @@ std::optional<std::string> CHTTPClient::getResponse(const std::string & strURL)
     const std::string && strDestURL = this->getIp_Port() + std::string("/") + strURL;
     std::string strResponse;
 
-    curl_easy_setopt(this->m_pCurl, CURLOPT_URL, strDestURL.c_str());
-    curl_easy_setopt(this->m_pCurl, CURLOPT_WRITEFUNCTION, CHTTPClient::writeCallback);
-    curl_easy_setopt(this->m_pCurl, CURLOPT_WRITEDATA, &strResponse);
-    curl_easy_setopt(this->m_pCurl, CURLOPT_TIMEOUT_MS, 3000);//设置超时时间3秒
-    curl_easy_setopt(this->m_pCurl, CURLOPT_CONNECTTIMEOUT_MS, 1000);//连接超时
-    CURLcode enRet = curl_easy_perform(this->m_pCurl);
+    curl_easy_setopt(this->m_pCurl.get(), CURLOPT_URL, strDestURL.c_str());
+    curl_easy_setopt(this->m_pCurl.get(), CURLOPT_WRITEFUNCTION, CHTTPClient::writeCallback);
+    curl_easy_setopt(this->m_pCurl.get(), CURLOPT_WRITEDATA, &strResponse);
+    curl_easy_setopt(this->m_pCurl.get(), CURLOPT_TIMEOUT_MS, 3000);//timeout for 3 secs in all
+    curl_easy_setopt(this->m_pCurl.get(), CURLOPT_CONNECTTIMEOUT_MS, 1000);//connection timeout for 1 sec
 
+    CURLcode enRet = curl_easy_perform(this->m_pCurl.get());
     if(CURLE_OK == enRet){
         return strResponse;
     }else{

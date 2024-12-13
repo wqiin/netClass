@@ -1,5 +1,7 @@
 #include "cftpsclient.h"
 
+#include "cresourceinit.h"
+
 #include <sstream>
 #include <cstdio>   //for tempfile()
 #include <filesystem>
@@ -11,8 +13,9 @@
 #include <ctime>   // for std::tm
 #include <thread>
 #include <utility>
-#include <mutex>
 #include <cstdlib>
+#include <exception>
+#include <cerrno>
 
 namespace fs = std::filesystem;
 enum FTPSCode
@@ -49,29 +52,19 @@ static const std::unordered_map<FTPSCode, std::string> g_mpFtpsErrMsg = {
     std::make_pair(EN_FTPS_FAILED_TO_CREATE_TMP_FILE, std::string("Failed to create a temperoary file by calling tmpfile")),
 };
 
-static std::once_flag g_ftpsCallOnce;
-
-static void release(){
-    curl_global_cleanup();
-}
-
-static void init(){
-    curl_global_init(CURL_GLOBAL_DEFAULT);//curl global initialization
-    std::atexit(release);
-}
 
 CFTPSClient::CFTPSClient(const StHostInfo & stInfo):m_pCurl(nullptr, &curl_easy_cleanup)
 {
-    std::call_once(g_ftpsCallOnce, init);
-    this->m_stParams = stInfo;
+    if(!CResourceInit::init())
+        this->m_strErrMsg = CResourceInit::getErrMsg();
+    else
+        this->m_pCurl.reset(curl_easy_init());
 
-    curl_global_init(CURL_GLOBAL_DEFAULT);//curl global initialization
-    this->m_pCurl.reset(curl_easy_init());
+    this->m_stParams = stInfo;
 }
 
 CFTPSClient::~CFTPSClient()
 {
-    curl_global_cleanup();//free curl global resource
 }
 
 CFTPSClient & CFTPSClient::setUserName(const std::string & strUserName)
@@ -204,13 +197,12 @@ std::optional<bool> CFTPSClient::removeDir(const std::string & strRemoteDir)
     curl_easy_setopt(this->m_pCurl.get(), CURLOPT_SSL_VERIFYPEER, 0L);
     curl_easy_setopt(this->m_pCurl.get(), CURLOPT_SSL_VERIFYHOST, 0L);
 
-    struct curl_slist * pCommands = nullptr;
+    std::unique_ptr<curl_slist, decltype(&curl_slist_free_all)> pHeaderList(nullptr, &curl_slist_free_all);
     const std::string && strCmd = std::string("RMD ") + strRemoteDir;
-    pCommands = curl_slist_append(pCommands, strCmd.c_str());
-    curl_easy_setopt(this->m_pCurl.get(), CURLOPT_QUOTE, pCommands);
+    pHeaderList.reset(curl_slist_append(pHeaderList.get(), strCmd.c_str()));
+    curl_easy_setopt(this->m_pCurl.get(), CURLOPT_QUOTE, pHeaderList.get());
 
     CURLcode enRet = curl_easy_perform(this->m_pCurl.get());
-    curl_slist_free_all(pCommands);
     if(CURLE_OK == enRet || CURLE_REMOTE_ACCESS_DENIED == enRet){
         return true;
     }else{
@@ -268,7 +260,7 @@ std::optional<std::vector<std::string>> CFTPSClient::listDir(const std::string &
 //list the filename in detail on given directory, the filename would be put into the returned vector
 std::optional<std::vector<StFile>> CFTPSClient::listDir_detailed(const std::string & strRemoteDir)
 {
-    fs::path remoteDir = strRemoteDir;
+    fs::path remoteDir(strRemoteDir);
     if(remoteDir.empty() || remoteDir.has_filename()){
         this->m_strErrMsg = g_mpFtpsErrMsg.at(EN_FTPS_INVALID_INPUT_ARGS);
         return std::nullopt;
@@ -332,7 +324,7 @@ std::optional<std::vector<StFile>> CFTPSClient::listDir_detailed(const std::stri
 //change the working directory, return true on success, otherwise return false
 std::optional<bool> CFTPSClient::cd(const std::string & strRemoteDir)
 {
-    fs::path remoteDir = strRemoteDir;
+    fs::path remoteDir(strRemoteDir);
     if(remoteDir.empty() || remoteDir.has_filename()){
         this->m_strErrMsg = g_mpFtpsErrMsg.at(EN_FTPS_INVALID_INPUT_ARGS);
         return std::nullopt;
@@ -352,13 +344,12 @@ std::optional<bool> CFTPSClient::cd(const std::string & strRemoteDir)
     curl_easy_setopt(this->m_pCurl.get(), CURLOPT_SSL_VERIFYPEER, 0L);
     curl_easy_setopt(this->m_pCurl.get(), CURLOPT_SSL_VERIFYHOST, 0L);
 
-    struct curl_slist* pHeaderList = nullptr;
-    pHeaderList = curl_slist_append(pHeaderList, strCMD.c_str());
-    curl_easy_setopt(this->m_pCurl.get(), CURLOPT_QUOTE, pHeaderList);
+    std::unique_ptr<curl_slist, decltype(&curl_slist_free_all)> pHeaderList(nullptr, &curl_slist_free_all);
+    pHeaderList.reset(curl_slist_append(pHeaderList.get(), strCMD.c_str()));
+    curl_easy_setopt(this->m_pCurl.get(), CURLOPT_QUOTE, pHeaderList.get());
 
     //perform the request
     CURLcode enRet = curl_easy_perform(this->m_pCurl.get());
-    curl_slist_free_all(pHeaderList);
     if(CURLE_OK == enRet){
         return true;
     }else{
@@ -386,12 +377,12 @@ std::optional<std::string> CFTPSClient::pwd()
     curl_easy_setopt(this->m_pCurl.get(), CURLOPT_SSL_VERIFYPEER, 0L);
     curl_easy_setopt(this->m_pCurl.get(), CURLOPT_SSL_VERIFYHOST, 0L);
 
-    struct curl_slist *pHeaderList = nullptr;
-    pHeaderList = curl_slist_append(pHeaderList, "PWD");
-    curl_easy_setopt(this->m_pCurl.get(), CURLOPT_QUOTE, pHeaderList);
+    //struct curl_slist *pHeaderList = nullptr;
+    std::unique_ptr<curl_slist, decltype(&curl_slist_free_all)> pHeaderList(nullptr, &curl_slist_free_all);
+    pHeaderList.reset(curl_slist_append(pHeaderList.get(), "PWD"));
+    curl_easy_setopt(this->m_pCurl.get(), CURLOPT_QUOTE, pHeaderList.get());
 
     CURLcode enRet = curl_easy_perform(this->m_pCurl.get());
-    curl_slist_free_all(pHeaderList);
     if(CURLE_OK == enRet){
         const std::string strStartTag = "257 \"";
         const std::string strEndTag = "\"";
@@ -414,7 +405,7 @@ std::optional<std::string> CFTPSClient::pwd()
 //make a given file in the remote,  return true on success, otherwise return false
 std::optional<bool> CFTPSClient::makeFile(const std::string & strRemoteFile)
 {
-    fs::path remoteFile = strRemoteFile;
+    fs::path remoteFile(strRemoteFile);
     if(remoteFile.empty() || !remoteFile.has_filename()){
         this->m_strErrMsg = g_mpFtpsErrMsg.at(EN_FTPS_INVALID_INPUT_ARGS);
         return std::nullopt;
@@ -434,22 +425,20 @@ std::optional<bool> CFTPSClient::makeFile(const std::string & strRemoteFile)
     const std::string && strURL = this->getIp_Port() + strRemoteFile;
     const std::string && strUserPwd = this->getUser_Pwd();
 
-    curl_easy_setopt(this->m_pCurl.get(), CURLOPT_URL, strURL.c_str());
-    curl_easy_setopt(this->m_pCurl.get(), CURLOPT_USERPWD, strUserPwd.c_str());
-
-    FILE * fpTemp = tmpfile();
+    std::unique_ptr<FILE, decltype(&fclose)> fpTemp(tmpfile(), &fclose);
     if(!fpTemp){
-        m_strErrMsg = std::string("Failed to create a temp file by calling tmpfile");
+        m_strErrMsg = std::string("Failed to create a temp file by calling tmpfile for ") + strerror(errno);
         return EN_FTPS_FAILED_TO_CREATE_TMP_FILE;
     }
 
+    curl_easy_setopt(this->m_pCurl.get(), CURLOPT_URL, strURL.c_str());
+    curl_easy_setopt(this->m_pCurl.get(), CURLOPT_USERPWD, strUserPwd.c_str());
     curl_easy_setopt(this->m_pCurl.get(), CURLOPT_UPLOAD, 1L);
-    curl_easy_setopt(this->m_pCurl.get(), CURLOPT_READDATA, fpTemp);
+    curl_easy_setopt(this->m_pCurl.get(), CURLOPT_READDATA, fpTemp.get());
     curl_easy_setopt(this->m_pCurl.get(), CURLOPT_SSL_VERIFYPEER, 0L);
     curl_easy_setopt(this->m_pCurl.get(), CURLOPT_SSL_VERIFYHOST, 0L);
 
     CURLcode enRet = curl_easy_perform(this->m_pCurl.get());
-    fclose(fpTemp);
     if(CURLE_OK == enRet){
         return true;
     }else{
@@ -461,8 +450,8 @@ std::optional<bool> CFTPSClient::makeFile(const std::string & strRemoteFile)
 //renam the given remote file, return true on success, otherwise return false
 std::optional<bool> CFTPSClient::renameFile(const std::string & strOldName, const std::string & strNewName)
 {
-    fs::path oldFilename = strOldName;
-    fs::path newFilename = strNewName;
+    fs::path oldFilename(strOldName);
+    fs::path newFilename(strNewName);
     if(oldFilename.empty() ||  newFilename.empty() ||
         !oldFilename.has_filename() || !newFilename.has_filename()){
         this->m_strErrMsg = g_mpFtpsErrMsg.at(EN_FTPS_INVALID_INPUT_ARGS);
@@ -483,16 +472,15 @@ std::optional<bool> CFTPSClient::renameFile(const std::string & strOldName, cons
     curl_easy_setopt(this->m_pCurl.get(), CURLOPT_SSL_VERIFYPEER, 0L);
     curl_easy_setopt(this->m_pCurl.get(), CURLOPT_SSL_VERIFYHOST, 0L);
 
-    struct curl_slist * pHeader_list = nullptr;
+    std::unique_ptr<curl_slist, decltype(&curl_slist_free_all)> pHeaderList(nullptr, &curl_slist_free_all);
     std::string && strTempCmd = std::string("RNFR ") + strOldName;
-    pHeader_list = curl_slist_append(pHeader_list, strTempCmd.c_str());
+    pHeaderList.reset(curl_slist_append(pHeaderList.get(), strTempCmd.c_str()));
 
     strTempCmd = std::string("RNTO ") + strNewName;
-    pHeader_list = curl_slist_append(pHeader_list, strTempCmd.c_str());
-    curl_easy_setopt(this->m_pCurl.get(), CURLOPT_POSTQUOTE, pHeader_list);
+    pHeaderList.reset(curl_slist_append(pHeaderList.get(), strTempCmd.c_str()));
+    curl_easy_setopt(this->m_pCurl.get(), CURLOPT_POSTQUOTE, pHeaderList.get());
 
     CURLcode enRet = curl_easy_perform(this->m_pCurl.get());
-    curl_slist_free_all(pHeader_list);
     if (CURLE_OK == enRet){
         return true;
     }else{
@@ -504,7 +492,7 @@ std::optional<bool> CFTPSClient::renameFile(const std::string & strOldName, cons
 //remove the given remote file, return true on success otherwise return false
 std::optional<bool> CFTPSClient::removeFile(const std::string & strRemoteFile)
 {
-    fs::path remoteFile = strRemoteFile;
+    fs::path remoteFile(strRemoteFile);
     if(remoteFile.empty() || !remoteFile.has_filename()){
         this->m_strErrMsg = g_mpFtpsErrMsg.at(EN_FTPS_INVALID_INPUT_ARGS);
         return std::nullopt;
@@ -537,8 +525,8 @@ std::optional<bool> CFTPSClient::removeFile(const std::string & strRemoteFile)
 //upload the given local file to the remote path, return true on success, otherwise return false
 std::optional<bool> CFTPSClient::upFile(const std::string & strLocalFile, const std::string & strRemotePath)
 {
-    fs::path localFile = strLocalFile;
-    fs::path remoteFile = strRemotePath;
+    fs::path localFile(strLocalFile);
+    fs::path remoteFile(strRemotePath);
     if(localFile.empty() || remoteFile.empty() || !localFile.has_filename()){
         this->m_strErrMsg = g_mpFtpsErrMsg.at(EN_FTPS_INVALID_INPUT_ARGS);
         return std::nullopt;
@@ -549,42 +537,34 @@ std::optional<bool> CFTPSClient::upFile(const std::string & strLocalFile, const 
         return std::nullopt;
     }
 
-    FILE * fp = fopen(strLocalFile.c_str(), "rb");
+    std::unique_ptr<FILE, decltype(&fclose)> fp(fopen(strLocalFile.c_str(), "rb"), &fclose);
     if (!fp){
         this->m_strErrMsg = g_mpFtpsErrMsg.at(EN_FTPS_FAILED_TO_OPEN_LOCAL_FILE);
         return std::nullopt;
     }
 
     //when the remote file passed as a directory, set the upload filename as the local filename
-    std::string strRemotePathTemp = strRemotePath;
-    if('/' == strRemotePathTemp.back()){
-        fs::path fpFileName = fs::path(strLocalFile);
-        strRemotePathTemp += fpFileName.filename().string();
+    if(!remoteFile.has_filename()){
+        remoteFile /= localFile.filename();
     }
 
-    //get the size of the file to upload
-    fseek(fp, 0L, SEEK_END);
-    size_t nFileSize = ftell(fp);
-    fseek(fp, 0L, SEEK_SET);
-
+    //get the size of the file to upload    
+    size_t nFileSize = fs::file_size(strLocalFile);
+    std::string && strRemotePathTemp = remoteFile.string();
     const std::string && strURL = this->getIp_Port() + strRemotePathTemp;
     const std::string && strUserPwd = this->getUser_Pwd();
 
     curl_easy_setopt(this->m_pCurl.get(), CURLOPT_URL, strURL.c_str());
     curl_easy_setopt(this->m_pCurl.get(), CURLOPT_USERPWD, strUserPwd.c_str());
     curl_easy_setopt(this->m_pCurl.get(), CURLOPT_READFUNCTION, CFTPSClient::upReadCallback);
-    curl_easy_setopt(this->m_pCurl.get(), CURLOPT_READDATA, fp);
+    curl_easy_setopt(this->m_pCurl.get(), CURLOPT_READDATA, fp.get());
     curl_easy_setopt(this->m_pCurl.get(), CURLOPT_FTP_CREATE_MISSING_DIRS, 1);
     curl_easy_setopt(this->m_pCurl.get(), CURLOPT_UPLOAD, 1);
     curl_easy_setopt(this->m_pCurl.get(), CURLOPT_INFILESIZE, nFileSize);
-    // curl_easy_setopt(this->m_pCurl.get(), CURLOPT_PROGRESSFUNCTION, CFTPSClient::progressCallback);
-    // curl_easy_setopt(this->m_pCurl.get(), CURLOPT_PROGRESSDATA, &this->m_fProgress);  // passing user data into the callback function
-    // curl_easy_setopt(this->m_pCurl.get(), CURLOPT_NOPROGRESS, 0L); // enable progress callback
     curl_easy_setopt(this->m_pCurl.get(), CURLOPT_SSL_VERIFYPEER, 0L);
     curl_easy_setopt(this->m_pCurl.get(), CURLOPT_SSL_VERIFYHOST, 0L);
 
     CURLcode enRet = curl_easy_perform(this->m_pCurl.get());
-    fclose(fp);
     if (CURLE_OK == enRet){
         return true;
     }else{
@@ -604,8 +584,8 @@ std::future<std::optional<std::pair<bool, std::string>>> CFTPSClient::upFile_asy
         try{
             std::optional<std::pair<bool, std::string>> bRet;
             {
-                fs::path remotePath = strRemotePath;
-                fs::path localPath = strLocalFile;
+                fs::path remotePath(strRemotePath);
+                fs::path localPath(strLocalFile);
 
                 if(remotePath.empty() || localPath.empty() || localPath.has_filename() == false){
                     bRet = std::make_pair(false, g_mpFtpsErrMsg.at(EN_FTPS_INVALID_INPUT_ARGS));
@@ -674,8 +654,8 @@ std::future<std::optional<std::pair<bool, std::string>>> CFTPSClient::upFile_asy
 //download the given remote file to the local file, return true on success, otherwise return false
 std::optional<bool> CFTPSClient::downFile(const std::string & strLocalFile , const std::string & strRemoteFile)
 {
-    fs::path remoteFile = strRemoteFile;
-    fs::path localFile = strLocalFile;
+    fs::path remoteFile(strRemoteFile);
+    fs::path localFile(strLocalFile);
     if(remoteFile.empty() || !remoteFile.has_filename() || localFile.empty()){
         this->m_strErrMsg = g_mpFtpsErrMsg.at(EN_FTPS_INVALID_INPUT_ARGS);
         return std::nullopt;
@@ -687,40 +667,35 @@ std::optional<bool> CFTPSClient::downFile(const std::string & strLocalFile , con
     }
 
     //create the local file path if not existing
-    if(!createDirectory(strLocalFile)){
-        this->m_strErrMsg = g_mpFtpsErrMsg.at(EN_FTPS_FAILED_TO_CREATE_LOCAL_DIR);
+    auto && pairRet = createDirectory(strLocalFile);
+    if(!pairRet.has_value() || !pairRet->first){
+        this->m_strErrMsg = g_mpFtpsErrMsg.at(EN_FTPS_FAILED_TO_CREATE_LOCAL_DIR) + pairRet->second;
         return std::nullopt;
     }
 
     //when the local file name passed as a directory, set the donw file name as the remote filename
-    std::string strLocalFileTemp = strLocalFile;
-    if('/' == strLocalFileTemp.back()){
-        fs::path fpFileName = fs::path(strRemoteFile);
-        strLocalFileTemp += fpFileName.filename().string();
+    if(!localFile.has_filename()){
+        localFile /= remoteFile.filename();
     }
 
-    FILE * fp = fopen(strLocalFileTemp.c_str(), "wb+");
+    std::string && strLocalFileTemp = remoteFile.string();
+    std::unique_ptr<FILE, decltype(&fclose)> fp(fopen(strLocalFileTemp.c_str(), "wb+"), &fclose);
     if(!fp){
         this->m_strErrMsg = g_mpFtpsErrMsg.at(EN_FTPS_FAILED_TO_OPEN_LOCAL_FILE);
         return std::nullopt;
     }
 
-    //this->m_fProgress = 0.0f;
     const std::string && strURL = this->getIp_Port() + strRemoteFile;
     const std::string && strUserPwd = this->getUser_Pwd();
 
     curl_easy_setopt(this->m_pCurl.get(), CURLOPT_URL, strURL.c_str());
     curl_easy_setopt(this->m_pCurl.get(), CURLOPT_USERPWD, strUserPwd.c_str());
     curl_easy_setopt(this->m_pCurl.get(), CURLOPT_WRITEFUNCTION, CFTPSClient::downWriteCallback);
-    // curl_easy_setopt(this->m_pCurl.get(), CURLOPT_PROGRESSFUNCTION, CFTPSClient::progressCallback);
-    // curl_easy_setopt(this->m_pCurl.get(), CURLOPT_PROGRESSDATA, &this->m_fProgress);  // passing user data into the callback function
-    // curl_easy_setopt(this->m_pCurl.get(), CURLOPT_NOPROGRESS, 0L); // enable progress callback
-    curl_easy_setopt(this->m_pCurl.get(), CURLOPT_WRITEDATA, fp);
+    curl_easy_setopt(this->m_pCurl.get(), CURLOPT_WRITEDATA, fp.get());
     curl_easy_setopt(this->m_pCurl.get(), CURLOPT_SSL_VERIFYPEER, 0L);
     curl_easy_setopt(this->m_pCurl.get(), CURLOPT_SSL_VERIFYHOST, 0L);
 
     CURLcode enRet = curl_easy_perform(this->m_pCurl.get());
-    fclose(fp);
     if (CURLE_OK == enRet){
         return true;
     }else{
@@ -740,8 +715,8 @@ std::future<std::optional<std::pair<bool, std::string>>> CFTPSClient::downFile_a
         try{
             std::optional<std::pair<bool, std::string>> bRet;
             {
-                fs::path remoteFile = strRemoteFile;
-                fs::path localFile = strLocalFile;
+                fs::path remoteFile(strRemoteFile);
+                fs::path localFile(strLocalFile);
 
                 if(remoteFile.empty() || localFile.empty() || remoteFile.has_filename() == false){
                     bRet = std::make_pair(false, g_mpFtpsErrMsg.at(EN_FTPS_INVALID_INPUT_ARGS));
@@ -758,8 +733,9 @@ std::future<std::optional<std::pair<bool, std::string>>> CFTPSClient::downFile_a
             }
 
             //create the local file path if not existing
-            if(!CFTPSClient::createDirectory(strLocalFile)){
-                bRet = std::make_pair(false, g_mpFtpsErrMsg.at(EN_FTPS_FAILED_TO_CREATE_LOCAL_DIR));
+            auto && pairRet = CFTPSClient::createDirectory(strLocalFile);
+            if(!pairRet.has_value() || !pairRet->first){
+                bRet = std::make_pair(false, g_mpFtpsErrMsg.at(EN_FTPS_FAILED_TO_CREATE_LOCAL_DIR) + pairRet->second);
                 promiseDownload.set_value(bRet);
                 return ;
             }
@@ -808,7 +784,7 @@ std::future<std::optional<std::pair<bool, std::string>>> CFTPSClient::downFile_a
 //get the given remote file content, return as a std::string
 std::optional<std::string> CFTPSClient::catFile(const std::string & strRemoteFile)
 {
-    fs::path remoteFile = strRemoteFile;
+    fs::path remoteFile(strRemoteFile);
     if(remoteFile.empty() || !remoteFile.has_filename()){
         this->m_strErrMsg = g_mpFtpsErrMsg.at(EN_FTPS_INVALID_INPUT_ARGS);
         return std::nullopt;
@@ -846,7 +822,7 @@ std::optional<std::string> CFTPSClient::catFile(const std::string & strRemoteFil
 //get the file size of the given remote file
 std::optional<std::int64_t> CFTPSClient::getFileSize(const std::string & strRemoteFile)
 {
-    fs::path remoteFile = strRemoteFile;
+    fs::path remoteFile(strRemoteFile);
     if(remoteFile.empty() || !remoteFile.has_filename()){
         this->m_strErrMsg = g_mpFtpsErrMsg.at(EN_FTPS_INVALID_INPUT_ARGS);
         return std::nullopt;
@@ -889,7 +865,7 @@ std::optional<std::int64_t> CFTPSClient::getFileSize(const std::string & strRemo
 //get the file size of the given remote file, having the same function with the getFileSize
 std::optional<std::uint64_t> CFTPSClient::getSize(const std::string & strRemoteFile)
 {
-    fs::path remoteFile = strRemoteFile;
+    fs::path remoteFile(strRemoteFile);
     if(remoteFile.empty() || !remoteFile.has_filename()){
         this->m_strErrMsg = g_mpFtpsErrMsg.at(EN_FTPS_INVALID_INPUT_ARGS);
         return std::nullopt;
@@ -949,7 +925,7 @@ std::optional<std::uint64_t> CFTPSClient::getSize(const std::string & strRemoteF
  //get the last file modification time, return the timestamp and time stirng with format 'yyyy-MM-dd hh:mm:ss' on sccuess
 std::optional<std::pair<std::int64_t, std::string>> CFTPSClient::getFileModificationTime(const std::string & strRemoteFile)
 {
-    fs::path remoteFile = strRemoteFile;
+    fs::path remoteFile(strRemoteFile);
     if(remoteFile.empty() || !remoteFile.has_filename()){
         this->m_strErrMsg = g_mpFtpsErrMsg.at(EN_FTPS_INVALID_INPUT_ARGS);
         return std::nullopt;
@@ -994,18 +970,6 @@ std::optional<std::pair<std::int64_t, std::string>> CFTPSClient::getFileModifica
     }
 }
 
-
-//get the progress of file upload or download as a percentage value
-std::optional<double> CFTPSClient::CFTPSClient::getProcess()
-{
-    if(!this->m_pCurl.get()){
-        this->m_strErrMsg = std::string("Failed to initialize network resource library");
-        return std::nullopt;
-    }
-
-    return std::nullopt;
-    //return this->m_fProgress;
-}
 
 std::string CFTPSClient::getIp_Port()
 {
@@ -1075,14 +1039,19 @@ int CFTPSClient::progressCallback(void* pUserData, double dltotal, double dlnow,
     return 0;  // 0 meaning the continuity of transportantion
 }
 
-//craete the missing directory of the given file
-bool CFTPSClient::createDirectory(const std::string & strFile)
+//craete the missing directory og the given file, return true on success, otherwise return flase and relative error message
+std::optional<std::pair<bool, std::string>> CFTPSClient::createDirectory(const std::string & strLocalFile)
 {
-    fs::path parentDir = fs::path(strFile).parent_path();
+    fs::path parentDir = fs::path(strLocalFile).parent_path();
     if(!fs::exists(parentDir)){
-        return fs::create_directories(parentDir);
+        try{
+            fs::create_directories(parentDir);//when parent directory exists return false
+            return std::pair{true, std::string()};
+        }catch(const std::exception & e){
+            return std::pair{false, e.what()};
+        }
     }
 
-    return true;
+    return std::pair{true, std::string()};
 }
 

@@ -5,7 +5,7 @@
 
 #include <string>
 #include <optional>
-
+#include <memory>
 
 enum HTTPMode{
     _EN_HTTP_ = 0,
@@ -19,7 +19,7 @@ class CHTTPClient
 {
 private:
     std::string m_strErrMsg = "";//error message of the last operation
-    CURL * m_pCurl = nullptr;//curl session handle
+    std::unique_ptr<CURL, decltype(&curl_easy_cleanup)> m_pCurl;
     HTTPMode m_enMode = HTTPMode::_EN_HTTP_;
 
     //the remote host information
