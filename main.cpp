@@ -6,8 +6,8 @@
 
 int main(int argc, char *argv[])
 {
-    const StHostInfo stHost = {std::string("hello"), std::string("515253"), std::string("127.0.0.1"), 21};
-    CFTPSClient ftp(stHost, FTPMode::_EN_FTP_);
+    const StHostInfo stHost = {std::string("hello"), std::string("515253"), std::string("127.0.0.1"), 21, FTPMode::_EN_FTP_};
+    CFTPSClient ftp(stHost);
 
 
     auto bRet = ftp.isParamsValid();

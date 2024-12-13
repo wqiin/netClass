@@ -31,16 +31,6 @@ typedef struct STFileInfo{
     std::string strFileName;//file fullname
 }StFile;
 
-
-//remote host service and user information
-typedef struct STHostInfo
-{
-    std::string m_strUserName = "";
-    std::string m_strPassword = "";
-    std::string m_strIp = "";
-    std::uint16_t m_nPort = 0;
-}StHostInfo;
-
 //file transfer protocol
 enum FTPMode{
     _EN_FTP_ = 0,   //
@@ -50,19 +40,27 @@ enum FTPMode{
     _EN_INVALID_LAST_,
 };
 
+//remote host service and user information
+typedef struct STHostInfo
+{
+    std::string m_strUserName = "";
+    std::string m_strPassword = "";
+    std::string m_strIp = "";
+    std::uint16_t m_nPort = 22;
+    FTPMode m_enMode = _EN_FTP_;//ftp protocol by default
+}StHostInfo;
+
+
+
 class CFTPSClient
 {
 private:
     StHostInfo m_stParams;//ftp connection parameters
-    std::int64_t m_nTimeCost = 0;
     std::string m_strErrMsg = "";//error message of the last operation
-    //CURL * m_pCurl = nullptr;//curl session handle
     std::unique_ptr<CURL, decltype(&curl_easy_cleanup)> m_pCurl;//(nullptr, &curl_easy_cleanup);
-    float m_fProgress = 0.0f;//progress of file transportation
-    FTPMode m_enMode = _EN_FTP_;
 
 public:
-    CFTPSClient(const StHostInfo & stInfo, FTPMode enMode = _EN_FTP_);
+    CFTPSClient(const StHostInfo & stInfo);
     ~CFTPSClient();
 
     //copy constructor and assignment operator prohibited

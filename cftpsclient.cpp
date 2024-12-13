@@ -11,7 +11,8 @@
 #include <ctime>   // for std::tm
 #include <thread>
 #include <utility>
-#include <memory>
+#include <mutex>
+#include <cstdlib>
 
 namespace fs = std::filesystem;
 enum FTPSCode
@@ -48,12 +49,21 @@ static const std::unordered_map<FTPSCode, std::string> g_mpFtpsErrMsg = {
     std::make_pair(EN_FTPS_FAILED_TO_CREATE_TMP_FILE, std::string("Failed to create a temperoary file by calling tmpfile")),
 };
 
+static std::once_flag g_ftpsCallOnce;
 
-CFTPSClient::CFTPSClient(const StHostInfo & stInfo, FTPMode enMode):m_pCurl(nullptr, &curl_easy_cleanup)
+static void release(){
+    curl_global_cleanup();
+}
+
+static void init(){
+    curl_global_init(CURL_GLOBAL_DEFAULT);//curl global initialization
+    std::atexit(release);
+}
+
+CFTPSClient::CFTPSClient(const StHostInfo & stInfo):m_pCurl(nullptr, &curl_easy_cleanup)
 {
-    this->m_nTimeCost = 0;
+    std::call_once(g_ftpsCallOnce, init);
     this->m_stParams = stInfo;
-    this->m_enMode = enMode;
 
     curl_global_init(CURL_GLOBAL_DEFAULT);//curl global initialization
     this->m_pCurl.reset(curl_easy_init());
@@ -90,7 +100,7 @@ CFTPSClient & CFTPSClient::setIP(const std::string & strIP)
 
 CFTPSClient & CFTPSClient::setMode(const FTPMode enMode)
 {
-    this->m_enMode = enMode;
+    this->m_stParams.m_enMode = enMode;
     return *this;
 }
 
@@ -557,7 +567,6 @@ std::optional<bool> CFTPSClient::upFile(const std::string & strLocalFile, const 
     size_t nFileSize = ftell(fp);
     fseek(fp, 0L, SEEK_SET);
 
-    this->m_fProgress = 0.0f;
     const std::string && strURL = this->getIp_Port() + strRemotePathTemp;
     const std::string && strUserPwd = this->getUser_Pwd();
 
@@ -568,9 +577,9 @@ std::optional<bool> CFTPSClient::upFile(const std::string & strLocalFile, const 
     curl_easy_setopt(this->m_pCurl.get(), CURLOPT_FTP_CREATE_MISSING_DIRS, 1);
     curl_easy_setopt(this->m_pCurl.get(), CURLOPT_UPLOAD, 1);
     curl_easy_setopt(this->m_pCurl.get(), CURLOPT_INFILESIZE, nFileSize);
-    curl_easy_setopt(this->m_pCurl.get(), CURLOPT_PROGRESSFUNCTION, CFTPSClient::progressCallback);
-    curl_easy_setopt(this->m_pCurl.get(), CURLOPT_PROGRESSDATA, &this->m_fProgress);  // passing user data into the callback function
-    curl_easy_setopt(this->m_pCurl.get(), CURLOPT_NOPROGRESS, 0L); // enable progress callback
+    // curl_easy_setopt(this->m_pCurl.get(), CURLOPT_PROGRESSFUNCTION, CFTPSClient::progressCallback);
+    // curl_easy_setopt(this->m_pCurl.get(), CURLOPT_PROGRESSDATA, &this->m_fProgress);  // passing user data into the callback function
+    // curl_easy_setopt(this->m_pCurl.get(), CURLOPT_NOPROGRESS, 0L); // enable progress callback
     curl_easy_setopt(this->m_pCurl.get(), CURLOPT_SSL_VERIFYPEER, 0L);
     curl_easy_setopt(this->m_pCurl.get(), CURLOPT_SSL_VERIFYHOST, 0L);
 
@@ -696,16 +705,16 @@ std::optional<bool> CFTPSClient::downFile(const std::string & strLocalFile , con
         return std::nullopt;
     }
 
-    this->m_fProgress = 0.0f;
+    //this->m_fProgress = 0.0f;
     const std::string && strURL = this->getIp_Port() + strRemoteFile;
     const std::string && strUserPwd = this->getUser_Pwd();
 
     curl_easy_setopt(this->m_pCurl.get(), CURLOPT_URL, strURL.c_str());
     curl_easy_setopt(this->m_pCurl.get(), CURLOPT_USERPWD, strUserPwd.c_str());
     curl_easy_setopt(this->m_pCurl.get(), CURLOPT_WRITEFUNCTION, CFTPSClient::downWriteCallback);
-    curl_easy_setopt(this->m_pCurl.get(), CURLOPT_PROGRESSFUNCTION, CFTPSClient::progressCallback);
-    curl_easy_setopt(this->m_pCurl.get(), CURLOPT_PROGRESSDATA, &this->m_fProgress);  // passing user data into the callback function
-    curl_easy_setopt(this->m_pCurl.get(), CURLOPT_NOPROGRESS, 0L); // enable progress callback
+    // curl_easy_setopt(this->m_pCurl.get(), CURLOPT_PROGRESSFUNCTION, CFTPSClient::progressCallback);
+    // curl_easy_setopt(this->m_pCurl.get(), CURLOPT_PROGRESSDATA, &this->m_fProgress);  // passing user data into the callback function
+    // curl_easy_setopt(this->m_pCurl.get(), CURLOPT_NOPROGRESS, 0L); // enable progress callback
     curl_easy_setopt(this->m_pCurl.get(), CURLOPT_WRITEDATA, fp);
     curl_easy_setopt(this->m_pCurl.get(), CURLOPT_SSL_VERIFYPEER, 0L);
     curl_easy_setopt(this->m_pCurl.get(), CURLOPT_SSL_VERIFYHOST, 0L);
@@ -994,12 +1003,13 @@ std::optional<double> CFTPSClient::CFTPSClient::getProcess()
         return std::nullopt;
     }
 
-    return this->m_fProgress;
+    return std::nullopt;
+    //return this->m_fProgress;
 }
 
 std::string CFTPSClient::getIp_Port()
 {
-    const std::string && strProtocol = (m_enMode == _EN_FTPS_) ? std::string("ftps://") : std::string("ftp://");
+    const std::string && strProtocol = (this->m_stParams.m_enMode == _EN_FTPS_) ? std::string("ftps://") : std::string("ftp://");
     return strProtocol + this->m_stParams.m_strIp + std::string(":") + std::to_string(this->m_stParams.m_nPort);
 }
 
