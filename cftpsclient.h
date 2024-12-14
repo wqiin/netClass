@@ -155,7 +155,9 @@ public:
     //get the error message according to the error code
     const std::string & getErrMsg() const;
 
-    //mage file upload or download
+private:
+    void generalSetting(const std::string & strURL);
+
 private:
     //upload read callback, being used to read the local file to upload
     static size_t upReadCallback(void * ptr, size_t size, size_t nmemb, void * stream);

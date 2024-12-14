@@ -56,7 +56,7 @@ std::optional<std::string> CHTTPClient::getResponse(const std::string & strURL)
         return std::nullopt;
     }
 
-    if(!m_pCurl){
+    if(!this->m_pCurl){
         this->m_strErrMsg = g_mpHttpsErrMsg[EN_FTTPS_RESOURCE_INIT_ERROR];
         return std::nullopt;
     }
@@ -91,7 +91,7 @@ std::string CHTTPClient::getIp_Port()
     return strProtocol + this->m_strIp + std::string(":") + std::to_string(this->m_nPort);
 }
 
-//CURL库回调函数
+//write data callback
 size_t CHTTPClient::writeCallback(void * contents, size_t size, size_t nmemb, void * pUserData){
     ((std::string*)pUserData)->append((char *)contents, size * nmemb);
     return size * nmemb;
