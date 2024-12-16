@@ -5,7 +5,6 @@
 #include <sstream>
 #include <cstdio>   //for tempfile()
 #include <filesystem>
-#include <unordered_map>
 #include <cctype>
 #include <iostream>
 #include <sstream> // for std::ostringstream
@@ -16,6 +15,7 @@
 #include <cstdlib>
 #include <exception>
 #include <cerrno>
+
 
 namespace fs = std::filesystem;
 enum FTPSCode
@@ -39,7 +39,7 @@ enum FTPSCode
 };
 
 //error code being mapped into the error message
-static const std::unordered_map<FTPSCode, std::string> g_mpFtpsErrMsg = {
+static const hash_map<FTPSCode, std::string> g_mpFtpsErrMsg = {
     std::make_pair(EN_FTPS_OK, std::string("No Error, everything OK")),
     std::make_pair(EN_FTPS_CONNECT_TIMEOUT, std::string("Timeout when connecting the Remote")),
     std::make_pair(EN_FTPS_TRANSIT_TIMEOUT, std::string("timeout when file transfermation")),
@@ -69,31 +69,31 @@ CFTPSClient::~CFTPSClient()
 
 CFTPSClient & CFTPSClient::setUserName(const std::string & strUserName)
 {
-    this->m_stParams.m_strUserName = strUserName;
+    this->m_stParams.strUserName = strUserName;
     return *this;
 }
 
 CFTPSClient & CFTPSClient::setPassword(const std::string & strPassword)
 {
-    this->m_stParams.m_strPassword = strPassword;
+    this->m_stParams.strPassword = strPassword;
     return *this;
 }
 
 CFTPSClient & CFTPSClient::setPort(const std::uint16_t nPort)
 {
-    this->m_stParams.m_nPort = nPort;
+    this->m_stParams.nPort = nPort;
     return *this;
 }
 
 CFTPSClient & CFTPSClient::setIP(const std::string & strIP)
 {
-    this->m_stParams.m_strIp = strIP;
+    this->m_stParams.strIp = strIP;
     return *this;
 }
 
 CFTPSClient & CFTPSClient::setMode(const FTPMode enMode)
 {
-    this->m_stParams.m_enMode = enMode;
+    this->m_stParams.enMode = enMode;
     return *this;
 }
 
@@ -105,7 +105,7 @@ const StHostInfo & CFTPSClient::getParams() const
 //to verify the parameters valid or not, return true when parameters valid,otherwise return false
 std::optional<bool> CFTPSClient::isParamsValid()
 {
-    if(m_stParams.m_strIp.empty() || m_stParams.m_strUserName.empty()){
+    if(m_stParams.strIp.empty() || m_stParams.strUserName.empty()){
         this->m_strErrMsg = g_mpFtpsErrMsg.at(EN_FTPS_INVALID_INPUT_ARGS);
         return std::nullopt;
     }
@@ -902,13 +902,13 @@ void CFTPSClient::generalSetting(const std::string & strURL)
 
 std::string CFTPSClient::getIp_Port()
 {
-    const std::string && strProtocol = (this->m_stParams.m_enMode == _EN_FTPS_) ? std::string("ftps://") : std::string("ftp://");
-    return strProtocol + this->m_stParams.m_strIp + std::string(":") + std::to_string(this->m_stParams.m_nPort);
+    const std::string && strProtocol = (this->m_stParams.enMode == _EN_FTPS_) ? std::string("ftps://") : std::string("ftp://");
+    return strProtocol + this->m_stParams.strIp + std::string(":") + std::to_string(this->m_stParams.nPort);
 }
 
 std::string CFTPSClient::getUser_Pwd()
 {
-    return this->m_stParams.m_strUserName + std::string(":") + this->m_stParams.m_strPassword;
+    return this->m_stParams.strUserName + std::string(":") + this->m_stParams.strPassword;
 }
 
  /************************************************************

@@ -43,11 +43,11 @@ enum FTPMode{
 //remote host service and user information
 typedef struct STHostInfo
 {
-    std::string m_strUserName = "";
-    std::string m_strPassword = "";
-    std::string m_strIp = "";
-    std::uint16_t m_nPort = 22;
-    FTPMode m_enMode = _EN_FTP_;//ftp protocol by default
+    std::string strUserName = "";
+    std::string strPassword = "";
+    std::string strIp = "";
+    std::uint16_t nPort = 22;
+    FTPMode enMode = _EN_FTP_;//ftp protocol by default
 }StHostInfo;
 
 
@@ -66,10 +66,8 @@ public:
     //copy constructor and assignment operator prohibited
     CFTPSClient(const CFTPSClient & ) = delete;
     CFTPSClient(const CFTPSClient && ) = delete;
-    void operator=(const CFTPSClient &) = delete;
-    void operator=(const CFTPSClient &&) = delete;
-    bool operator==(const CFTPSClient &) = delete;
-    bool operator==(const CFTPSClient &&) = delete;
+    CFTPSClient & operator=(const CFTPSClient &) = delete;
+    CFTPSClient & operator=(const CFTPSClient &&) = delete;
 
 
     /*************************************************************************

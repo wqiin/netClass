@@ -3,8 +3,13 @@
 
 #include <cstddef>
 #include <string>
+#include <unordered_map>
 
 #include "curl/curl.h"
+
+
+template<typename key, typename value>
+using hash_map = std::unordered_map<key, value>;
 
 class CResourceInit
 {

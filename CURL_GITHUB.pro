@@ -14,15 +14,20 @@ else: unix:!android: target.path = /opt/$${TARGET}/bin
 
 
 INCLUDEPATH += ../../zd_code/curl/
+INCLUDEPATH += /usr/local/mysql/include/
+
+LIBS += -L/usr/local/mysql/lib -lmysqlclient
 LIBS += -lcurl
 
 HEADERS += \
           cftpsclient.h \
           chttpclient.h \
+          cmysql.h \
           cresourceinit.h
 
 SOURCES += \
         cftpsclient.cpp \
         chttpclient.cpp \
+        cmysql.cpp \
         cresourceinit.cpp \
         main.cpp

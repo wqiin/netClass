@@ -9,7 +9,7 @@ int main(int argc, char *argv[])
     const StHostInfo stHost = {std::string("hello"), std::string("515253"), std::string("127.0.0.1"), 21, FTPMode::_EN_FTP_};
     CFTPSClient ftp(stHost);
 
-
+/*
     auto bRet = ftp.isParamsValid();
     if(bRet.has_value() && *bRet){
         std::cout << "Parameters OK" << std::endl;
@@ -34,8 +34,8 @@ int main(int argc, char *argv[])
         std::cout << "error message:" << bRet2->second << std::endl;
     }
 
-
-    CHTTPClient http("127.0.0.1", 80);
+    */
+    CHTTPClient http("www.baidu.com", 80);
     auto strRet = http.getResponse("/");
     if(strRet.has_value()){
         std::cout << "message from http:" << *strRet << std::endl;

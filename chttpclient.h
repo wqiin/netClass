@@ -27,14 +27,14 @@ private:
     std::uint16_t m_nPort = 80;
 
 public:
-    CHTTPClient(const std::string & strIp, const std::uint16_t nPort = 80);
-    ~CHTTPClient();
+    CHTTPClient(const std::string & strIp, const std::uint16_t nPort = 80, const HTTPMode enMode = _EN_HTTP_);
+    ~CHTTPClient() = default;
 
     //copy constructor and assignment operator prohibited
     CHTTPClient(const CHTTPClient & ) = delete;
     CHTTPClient(const CHTTPClient && ) = delete;
-    void operator=(const CHTTPClient &) = delete;
-    void operator=(const CHTTPClient &&) = delete;
+    CHTTPClient & operator=(const CHTTPClient &) = delete;
+    CHTTPClient & operator=(const CHTTPClient &&) = delete;
 
     CHTTPClient & setIp(const std::string & strIp);
     CHTTPClient & setPort(const std::uint16_t nPort);
@@ -48,7 +48,7 @@ private:
     std::string getIp_Port();
 
 private:
-    static size_t writeCallback(void * contents, size_t size, size_t nmemb, void * pUserData);
+    static size_t readRespCallback(void * contents, size_t size, size_t nmemb, void * pUserData);
 };
 
 #endif // CHTTPCLIENT_H
