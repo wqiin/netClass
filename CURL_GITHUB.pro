@@ -20,12 +20,19 @@ LIBS += -L/usr/local/mysql/lib -lmysqlclient
 LIBS += -lcurl
 
 HEADERS += \
+          SysConfig.h \
+          cdbconnectpool.h \
+          cdbmanager.h \
           cftpsclient.h \
           chttpclient.h \
           cmysql.h \
-          cresourceinit.h
+          cresourceinit.h \
+          data_type_defination.h \
+          threadPool.hpp
 
 SOURCES += \
+        cdbconnectpool.cpp \
+        cdbmanager.cpp \
         cftpsclient.cpp \
         chttpclient.cpp \
         cmysql.cpp \

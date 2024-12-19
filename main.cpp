@@ -2,7 +2,10 @@
 #include "cftpsclient.h"
 #include "chttpclient.h"
 
+#include "threadPool.hpp""
+#include "cmysql.h""
 #include <iostream>
+
 
 int main(int argc, char *argv[])
 {
@@ -35,13 +38,41 @@ int main(int argc, char *argv[])
     }
 
     */
-    CHTTPClient http("www.baidu.com", 80);
-    auto strRet = http.getResponse("/");
-    if(strRet.has_value()){
-        std::cout << "message from http:" << *strRet << std::endl;
-    }else{
-        std::cout << "err msg from http:" <<http.getErrMsg() << std::endl;
+
+    /*
+    auto getResp = [](){
+        CHTTPClient http("www.baidu.com", 80);
+        auto strRet = http.get("/");
+        if(strRet.has_value()){
+            std::cout << "message from http:" << *strRet << std::endl;
+        }else{
+            std::cout << "err msg from http:" <<http.getErrMsg() << std::endl;
+        }
+    };
+
+    UT::CThreadPool pool(3);
+    std::vector<std::future<void>> vecFuture;
+    for(int ii = 0; ii < 50; ii++){
+        vecFuture.emplace_back(pool.addTask(getResp));
     }
+
+
+    for(auto & item : vecFuture)
+        item.get();
+
+    std::cout << "END\n";
+    */
+
+    StDBParams params;
+    params.strPassword = "shan53...";
+    params.strDBName = "wqiin";
+    const std::string strSQL = "select * from course";
+
+    CMySQL sql;
+
+    std::vector<StCourse> vecResult;
+    sql.query_table(vecResult);
+    //sql.query(strSQL);
 
     return 0;
 }

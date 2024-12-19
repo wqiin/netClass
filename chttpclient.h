@@ -40,7 +40,11 @@ public:
     CHTTPClient & setPort(const std::uint16_t nPort);
 
 
-    std::optional<std::string> getResponse(const std::string & strURL);
+    //general HTTP request methods
+    std::optional<std::string> get(const std::string & strURL);
+    std::optional<std::string> post(const std::string & strURL, const std::string & strData);
+    std::optional<std::string> put(const std::string & strURL, const std::string & strData);
+    std::optional<std::string> head(const std::string & strURL);
 
     const std::string & getErrMsg() const;
 

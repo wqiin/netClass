@@ -46,7 +46,7 @@ CHTTPClient & CHTTPClient::setPort(const std::uint16_t nPort)
     return *this;
 }
 
-std::optional<std::string> CHTTPClient::getResponse(const std::string & strURL)
+std::optional<std::string> CHTTPClient::get(const std::string & strURL)
 {
     if(strURL.empty()){
         this->m_strErrMsg = g_mpHttpsErrMsg[EN_HTTPS_INVALID_INPUT_ARGS];
