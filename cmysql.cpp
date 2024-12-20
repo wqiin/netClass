@@ -107,13 +107,15 @@ bool CMySQL::query_table(std::vector<StCourse> & vecResult)
     if(!query_result.has_value())
         return false;
 
-    auto && pairResult = query_result->get();
+    //check whether error occuring when query
+    auto && pairResult = query_result->get();//wait the query ending
     if(!pairResult.first.empty()){
         std::cout << "Db operation error message:"  << pairResult.first << std::endl;
         return false;
     }
-    auto && records = pairResult.second;
+    auto && records = pairResult.second;//result of such the query
 
+    //access the result of such the query
     for(size_t ii = 0; ii < records.size(); ii++){
         StCourse stTemp;
         stTemp.nID = records.getItem<std::int64_t>(ii, "id");

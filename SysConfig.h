@@ -1,10 +1,7 @@
 #ifndef SYSCONFIG_H
 #define SYSCONFIG_H
 
-#include "cmysql.h"
-
-const int nConnCount = 10;//DB connection count
-const int nThreadCount = 4;//thread count
+#include "data_type_defination.h"
 
 const StDBParams DBparams = {
     "127.0.0.1",

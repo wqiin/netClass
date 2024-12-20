@@ -2,9 +2,12 @@
 #define CDBCONNECTPOOL_H
 
 #include "mysql.h"
-#include <queue>
+
 #include <memory>
 #include <string>
+#include <list>
+#include <atomic>
+#include <mutex>
 
 class CDBConnectPool
 {
@@ -18,17 +21,32 @@ public:
     const std::string & getErrMsg() const;
     int getConnCount() const;
 
-    DBConnPtr & getConnetion()
-    {
-        return m_queConns.front();
-    }
+    std::pair<std::atomic<bool>, DBConnPtr> & getAConn();
+
+    //manager the DB conn returned by method getAConn
+    class ConnManager{
+    public:
+        ConnManager(std::pair<std::atomic<bool>, DBConnPtr> & pairConn):m_pairConn(pairConn){}
+
+        //making such the conn not busy and available
+        ~ConnManager(){
+            m_pairConn.first.store(false);
+        }
+
+    private:
+        std::pair<std::atomic<bool>, DBConnPtr> & m_pairConn;
+    };
 
 private:
     void connect2DB();
 
 private:
+    //key marking wherther the conn being busy
+    std::list<std::pair<std::atomic<bool>, DBConnPtr>> m_lstConns;
 
-    std::queue<DBConnPtr> m_queConns;
+    //to lock the m_lstConns when appending item backward
+    std::mutex m_mtx;
+
     std::string m_strErrMsg;
     size_t m_nConnCount = 2;
 };

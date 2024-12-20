@@ -5,6 +5,15 @@
 #include <string>
 #include <cstdint>
 
+//DB connection parameters
+typedef struct ST_dbParams{
+    std::string strIp = "127.0.0.1";
+    std::uint16_t nPort = 3306;
+    std::string strUsername = "root";
+    std::string strPassword;
+    std::string strDBName;
+}StDBParams;
+
 struct StDate{
     int nYear = -1;
     int nMonth = -1;

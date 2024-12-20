@@ -42,7 +42,7 @@ class CDBManager
 {
 public:
     static CDBManager & getInst(){
-        static CDBManager inst;
+        static CDBManager inst(1, 1);
         return inst;
     }
 

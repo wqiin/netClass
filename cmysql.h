@@ -3,17 +3,6 @@
 
 #include "data_type_defination.h"
 
-typedef struct ST_dbParams{
-    std::string strIp = "127.0.0.1";
-    std::uint16_t nPort = 3306;
-    std::string strUsername = "root";
-    std::string strPassword;
-    std::string strDBName;
-}StDBParams;
-
-template<typename key, typename value>
-using hash_map = std::unordered_map<key, value>;
-
 // such the class being designed to focus on the basic db operation
 
 class CMySQL
